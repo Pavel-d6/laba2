@@ -1,0 +1,50 @@
+[project]
+name = "study-example"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.10"
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^2.20.0"
+black = "^22.10.0"
+ruff="^0.1.9"
+mypy = "^0.991"
+
+
+
+[tool.black]
+line-length = 120
+target-version = ['py312']
+
+
+[tool.ruff]
+fix = false
+target-version = "py312"
+line-length = 120
+
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 120
+
+
+[tool.ruff.lint.isort]
+case-sensitive = true
+force-single-line=true
+lines-between-types = 1
+no-sections = false
+
+[tool.mypy]
+python_version = "3.12"
+incremental = false
+ignore_missing_imports = true
+disallow_untyped_defs = true
+warn_unreachable=true
+disallow_incomplete_defs = true
+show_error_context = true
