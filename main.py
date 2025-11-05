@@ -221,7 +221,7 @@ def mv(
     source: str = typer.Argument(..., help="Source file/directory"),
     destination: str = typer.Argument(..., help="Destination path"),
 ):
-    """Move or rename files and directories"""
+ 
 
     logger = logging.getLogger()
     if not os.path.exists(source):
@@ -276,16 +276,12 @@ def rm(
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Remove directories recursively"),
     force: bool = typer.Option(False, "-f", "--force", help="Force removal without confirmation"),
 ):
-    """Remove files or directories"""
-    
-    # Проверка существования пути
+
     if not os.path.exists(path):
         error_msg = f"cannot remove '{path}': No such file or directory"
         typer.echo(f"rm: {error_msg}")
         logger.info(f"rm: {error_msg}")
         return
-
-    # Защита от удаления критических путей
     if protected_path(path):
         error_msg = f"cannot remove '{path}': Protected directory"
         typer.echo(f"rm: {error_msg}")
@@ -294,7 +290,6 @@ def rm(
 
     try:
         if os.path.isfile(path):
-            # Удаление файла
             if not force:
                 confirmation = typer.confirm(f"Remove file '{path}'?")
                 if not confirmation:
