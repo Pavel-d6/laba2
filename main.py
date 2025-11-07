@@ -5,31 +5,14 @@ import pwd as pwd_mod
 import time
 import logging
 import shutil
+import zipfile
+import tarfile
 from pathlib import Path
 from typing import Optional
+
 app = typer.Typer()
 STATE_FILE = "shell_state.txt"
-def save_current_path(current_path):
-    """Сохранить текущий путь в файл"""
-    with open(STATE_FILE, "w") as f:
-        f.write(current_path)
 
-def load_current_path():
-    """Загрузить сохраненный путь из файла"""
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            return f.read().strip()
-    return os.getcwd() 
-
-
-def setup_logging():
-    """Настройка системы логирования"""
-    log_file = Path('shell.log')
-    logging.basicConfig(
-        filename=log_file,
-        level=logging.INFO,
-        format='[%(asctime)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S')
 
 
 @app.command()
@@ -37,6 +20,13 @@ def ls(
     path: Optional[str] = typer.Argument(None, help="Directory or file path"),
     long_fotmat: bool = typer.Option(False, "-l", help="Long format")
 ):  
+    """Показывает содержимое директории
+    Args:
+        path: путь к директории
+        long_format: флаг длинного формата
+    Returns:
+        None
+    """
     logger = logging.getLogger()
     try:
         target_path = path or load_current_path()
@@ -90,15 +80,16 @@ def ls(
     except:
         logger.info("Error ls")
 
-
-
-
-
-
 @app.command()
 def cd(
     path: Optional[str] = typer.Argument(None, help="Input Directory")
 ):  
+    """Меняет текущую рабочую директорию
+    Args:
+        path: целевой путь
+    Returns:
+        None
+    """
     logger = logging.getLogger()
     now_path = load_current_path()
 
@@ -129,13 +120,22 @@ def cd(
 
 @app.command()
 def pwd():
+    """Показывает текущую рабочую директорию
+    Returns:
+        None
+    """
     typer.echo(load_current_path())
-
 
 @app.command()
 def cat(
     file: Optional[str] = typer.Argument(None, help="Input file name")
 ):
+    """Выводит содержимое файла в консоль
+    Args:
+        file: путь к файлу
+    Returns:
+        None
+    """
     current_path = load_current_path()
     if file is None:
         error_msg = "cat: missing file operand"
@@ -170,17 +170,22 @@ def cat(
         typer.echo(error_msg)
         logger.info(error_msg)
 
-
-
 @app.command()
 def cp(
     source: str = typer.Argument(..., help="Source file/directory"),
     destination: str = typer.Argument(..., help="Destination path"),
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Copy directories recursively"),
 ):  
+    """Копирует файлы и директории
+    Args:
+        source: исходный путь
+        destination: целевой путь
+        recursive: флаг рекурсивного копирования
+    Returns:
+        None
+    """
     current_path = load_current_path()
     
-    # Получаем абсолютные пути
     if os.path.isabs(source):
         abs_source = source
     else:
@@ -191,20 +196,17 @@ def cp(
     else:
         abs_destination = os.path.join(current_path, destination)
     
-    # Проверяем существует ли источник
     if not os.path.exists(abs_source):
         typer.echo(f"cp: cannot stat '{source}': No such file or directory")
         return
     
     try:
         if os.path.isfile(abs_source):
-            # Копирование файла
             shutil.copy2(abs_source, abs_destination)
             typer.echo(f"Copied '{source}' to '{destination}'")
         
         elif os.path.isdir(abs_source):
             if recursive:
-                # Рекурсивное копирование директории
                 shutil.copytree(abs_source, abs_destination)
                 typer.echo(f"Copied directory '{source}' to '{destination}'")
             else:
@@ -215,14 +217,18 @@ def cp(
     except Exception as e:
         typer.echo(f"cp: cannot copy '{source}' to '{destination}': {str(e)}")
 
-
 @app.command()
 def mv(
     source: str = typer.Argument(..., help="Source file/directory"),
     destination: str = typer.Argument(..., help="Destination path"),
 ):
- 
-
+    """Перемещает или переименовывает файлы и директории
+    Args:
+        source: исходный путь
+        destination: целевой путь
+    Returns:
+        None
+    """
     logger = logging.getLogger()
     if not os.path.exists(source):
         error_msg = f"cannot stat '{source}': No such file or directory"
@@ -269,14 +275,20 @@ def mv(
         typer.echo(f"mv: {error_msg}")
         logger.info(f"mv: {error_msg}")
 
-
 @app.command()
 def rm(
     path: str = typer.Argument(..., help="File or directory to remove"),
     recursive: bool = typer.Option(False, "-r", "--recursive", help="Remove directories recursively"),
     force: bool = typer.Option(False, "-f", "--force", help="Force removal without confirmation"),
 ):
-
+    """Удаляет файлы и директории
+    Args:
+        path: путь к удаляемому объекту
+        recursive: флаг рекурсивного удаления
+        force: флаг принудительного удаления
+    Returns:
+        None
+    """
     if not os.path.exists(path):
         error_msg = f"cannot remove '{path}': No such file or directory"
         typer.echo(f"rm: {error_msg}")
@@ -335,8 +347,195 @@ def rm(
         typer.echo(f"rm: {error_msg}")
         logger.info(f"rm: {error_msg}")
 
+
+@app.command(name="zip")
+def zip_cmd(
+    folder: str = typer.Argument(..., help="Folder to archive"),
+    archive: str = typer.Argument(..., help="Output ZIP file"),
+):
+    """Создает ZIP архив из директории
+    Args:
+        folder: исходная директория
+        archive: имя архива
+    Returns:
+        None
+    """
+    logger = logging.getLogger()
+    if not os.path.exists(folder):
+        error_msg = f"cannot archive '{folder}': No such file or directory"
+        typer.echo(f"zip: {error_msg}")
+        logger.info(f"zip: {error_msg}")
+        return
+        
+    if not os.path.isdir(folder):
+        error_msg = f"cannot archive '{folder}': Not a directory"
+        typer.echo(f"zip: {error_msg}")
+        logger.info(f"zip: {error_msg}")
+        return
+
+    try:
+        with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(folder):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, os.path.dirname(folder))
+                    zipf.write(file_path, arcname)
+                    
+        success_msg = f"Created archive '{archive}' from '{folder}'"
+        typer.echo(success_msg)
+        logger.info(success_msg)
+        
+    except Exception as e:
+        error_msg = f"cannot create archive: {e}"
+        typer.echo(f"zip: {error_msg}")
+        logger.info(f"zip: {error_msg}")
+
+@app.command(name="unzip")
+def unzip_cmd(
+    archive: str = typer.Argument(..., help="ZIP archive to extract"),
+    target_dir: str = typer.Argument(".", help="Target directory"),
+):
+    """Распаковывает ZIP архив
+    Args:
+        archive: архив для распаковки
+        target_dir: целевая директория
+    Returns:
+        None
+    """
+    logger = logging.getLogger()
+    if not os.path.exists(archive):
+        error_msg = f"cannot extract '{archive}': No such file or directory"
+        typer.echo(f"unzip: {error_msg}")
+        logger.info(f"unzip: {error_msg}")
+        return
+
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        
+        with zipfile.ZipFile(archive, 'r') as zipf:
+            zipf.extractall(target_dir)
+            file_list = zipf.namelist()
+            
+        success_msg = f"Extracted {len(file_list)} files from '{archive}' to '{target_dir}'"
+        typer.echo(success_msg)
+        logger.info(success_msg)
+        
+    except Exception as e:
+        error_msg = f"cannot extract archive: {e}"
+        typer.echo(f"unzip: {error_msg}")
+        logger.info(f"unzip: {error_msg}")
+
+@app.command(name="tar")
+def tar_cmd(
+    folder: str = typer.Argument(..., help="Folder to archive"),
+    archive: str = typer.Argument(..., help="Output TAR.GZ file"),
+):
+    """Создает TAR.GZ архив из директории
+    Args:
+        folder: исходная директория
+        archive: имя архива
+    Returns:
+        None
+    """
+    logger = logging.getLogger()
+    if not os.path.exists(folder):
+        error_msg = f"cannot archive '{folder}': No such file or directory"
+        typer.echo(f"tar: {error_msg}")
+        logger.info(f"tar: {error_msg}")
+        return
+        
+    if not os.path.isdir(folder):
+        error_msg = f"cannot archive '{folder}': Not a directory"
+        typer.echo(f"tar: {error_msg}")
+        logger.info(f"tar: {error_msg}")
+        return
+
+    try:
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(folder, arcname=os.path.basename(folder))
+            
+        success_msg = f"Created archive '{archive}' from '{folder}'"
+        typer.echo(success_msg)
+        logger.info(success_msg)
+        
+    except Exception as e:
+        error_msg = f"cannot create archive: {e}"
+        typer.echo(f"tar: {error_msg}")
+        logger.info(f"tar: {error_msg}")
+
+@app.command(name="untar")
+def untar_cmd(
+    archive: str = typer.Argument(..., help="TAR.GZ archive to extract"),
+    target_dir: str = typer.Argument(".", help="Target directory"),
+):
+    """Распаковывает TAR.GZ архив
+    Args:
+        archive: архив для распаковки
+        target_dir: целевая директория
+    Returns:
+        None
+    """
+    logger = logging.getLogger()
+    if not os.path.exists(archive):
+        error_msg = f"cannot extract '{archive}': No such file or directory"
+        typer.echo(f"untar: {error_msg}")
+        logger.info(f"untar: {error_msg}")
+        return
+
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        
+        with tarfile.open(archive, "r:gz") as tar:
+            tar.extractall(target_dir)
+            file_list = tar.getnames()
+            
+        success_msg = f"Extracted {len(file_list)} files from '{archive}' to '{target_dir}'"
+        typer.echo(success_msg)
+        logger.info(success_msg)
+        
+    except Exception as e:
+        error_msg = f"cannot extract archive: {e}"
+        typer.echo(f"untar: {error_msg}")
+        logger.info(f"untar: {error_msg}")
+
+
+
+def save_current_path(current_path):
+    """Сохраняет текущий путь в файл состояния"""
+    with open(STATE_FILE, "w") as f:
+        f.write(current_path)
+
+def load_current_path():
+    """Загружает сохраненный путь из файла состояния
+    Returns:
+        str: текущий путь
+    """
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r") as f:
+            return f.read().strip()
+    return os.getcwd() 
+
+def setup_logging():
+    """Настраивает систему логирования
+    Returns:
+        None
+    """
+    log_file = Path('shell.log')
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.INFO,
+        format='[%(asctime)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S')
+    
+    
+
 def protected_path(path: str) -> bool:
-    """защищенные от удаления"""
+    """Проверяет защищенные от удаления пути
+    Args:
+        path: проверяемый путь
+    Returns:
+        bool: True если путь защищен
+    """
     abs_path = os.path.abspath(path)
     protected_paths = [
         "/",
@@ -354,7 +553,12 @@ def protected_path(path: str) -> bool:
     return False
 
 def count_items(directory: str) -> int:
-    """кол-во элементов в директории"""
+    """Считает количество элементов в директории
+    Args:
+        directory: путь к директории
+    Returns:
+        int: количество элементов
+    """
     count = 0
     try:
         for dirs, files in os.walk(directory):
@@ -362,16 +566,8 @@ def count_items(directory: str) -> int:
     except (PermissionError, OSError):
         return -1
     return count
-    
-    
-    
-
 
 if __name__ == "__main__":
-
     logger = logging.getLogger()
     setup_logging()
     app()
-
-
-#python sh.py cp -r /Users/pavel/Documents/nf  /Users/pavel/Downloads/ 
